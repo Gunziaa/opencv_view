@@ -3,7 +3,10 @@ from ctypes.wintypes import RECT, HWND
 from time import time
 
 import numpy as np
+import win32api
+import win32con
 import win32gui
+import win32ui
 
 GetDC = windll.user32.GetDC
 CreateCompatibleDC = windll.gdi32.CreateCompatibleDC
@@ -21,33 +24,64 @@ windll.user32.SetProcessDPIAware()
 
 
 class WindowCapture:
-    def __init__(self, window_name):
-        # 找到要截图的窗口句柄
-        self.hwnd = win32gui.FindWindow(None, window_name)
-        if not self.hwnd:
-            raise Exception('找不到不到窗口: {}'.format(window_name))
+    """参数可以是 :
 
-    def get_screenshot(self):
+    -窗口句柄,
+
+    -窗口标题,
+
+    -par = 0  表示全屏截图 ,
+
+    -par = (x, y, width, height) 表示指定区域截图
+
+    """
+    def __init__(self, par):
+        self.y = 0
+        self.x = 0
+        if par == 0:  # 全屏截图
+            self.hwnd = par
+            # 获取屏幕的宽度和高度
+            self.width = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
+            self.height = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
+
+        elif isinstance(par, tuple) or isinstance(par, list):  # 认为是指定区域截图  参数= (x,y,width,height)
+            self.hwnd = 0
+            self.x = par[0]
+            self.y = par[1]
+            self.width = par[2]
+            self.height = par[3]
+
+        elif par > 0:  # par 大于0 认为是窗口句柄
+            self.hwnd = par
+            r = RECT()
+            GetClientRect(self.hwnd, byref(r))
+            self.width, self.height = r.right, r.bottom
+
+        elif isinstance(par, str):
+            # 找到要截图的窗口句柄
+            self.hwnd = win32gui.FindWindow(None, par)
+            # 获取窗口客户区的大小
+            r = RECT()
+            GetClientRect(self.hwnd, byref(r))
+            self.width, self.height = r.right, r.bottom
+            if not self.hwnd:
+                raise Exception('找不到不到窗口: {}'.format(par))
+
+    def screenshot(self):
         """窗口客户区截图
-
-           Args:
-               handle (HWND): 要截图的窗口句柄
-
            Returns:
                numpy.ndarray: 截图数据
            """
         # 获取窗口客户区的大小
-        r = RECT()
-        GetClientRect(self.hwnd, byref(r))
-        width, height = r.right, r.bottom
         # 开始截图
+        # 此方法获取的图片格式为 BGRA
         dc = GetDC(self.hwnd)
         cdc = CreateCompatibleDC(dc)
-        bitmap = CreateCompatibleBitmap(dc, width, height)
+        bitmap = CreateCompatibleBitmap(dc, self.width, self.height)
         SelectObject(cdc, bitmap)
-        BitBlt(cdc, 0, 0, width, height, dc, 0, 0, SRCCOPY)
+        BitBlt(cdc, 0, 0, self.width, self.height, dc, self.x, self.y, SRCCOPY)
         # 截图是BGRA排列，因此总元素个数需要乘以4
-        total_bytes = width * height * 4
+        total_bytes = self.width * self.height * 4
         buffer = bytearray(total_bytes)
         byte_array = c_ubyte * total_bytes
         GetBitmapBits(bitmap, total_bytes, byte_array.from_buffer(buffer))
@@ -55,24 +89,18 @@ class WindowCapture:
         DeleteObject(cdc)
         ReleaseDC(self.hwnd, dc)
         # 返回截图数据为numpy.ndarray
-        return np.frombuffer(buffer, dtype=np.uint8).reshape(height, width, 4)
+        img = np.frombuffer(buffer, dtype=np.uint8).reshape(self.height, self.width, 4)
+        return img
 
-    def list_window_names(self):
-        # 获取所有打开的窗口每次列表
-        def winEnumHandler(hwnd, ctx):
-            if win32gui.IsWindowVisible(hwnd):
-                print(hex(hwnd), win32gui.GetWindowText(hwnd))
-
-        win32gui.EnumWindows(winEnumHandler, None)
-
-    def save_image(self, file):
-        cv.imwrite(file + '.png', self.get_screenshot())
+    def save_screenshot(self, file):
+        """保存截图"""
+        cv.imwrite(file + '.png', self.screenshot())
 
 
 if __name__ == '__main__':
     import cv2 as cv
 
-    wincap = WindowCapture('剑网3系列启动器')
+    wincap = WindowCapture(0)
     # wincap.list_window_names()
     # screenshot = wincap.get_screenshot()
 

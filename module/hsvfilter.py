@@ -1,3 +1,5 @@
+import json
+
 import cv2 as cv
 from time import sleep
 
@@ -5,21 +7,6 @@ import numpy as np
 
 
 class HsvFilter:
-    def __init__(self, hMin=None, sMin=None, vMin=None, hMax=None, sMax=None, vMax=None,
-                 sAdd=None, sSub=None, vAdd=None, vSub=None):
-        self.hMin = hMin
-        self.sMin = sMin
-        self.vMin = vMin
-        self.hMax = hMax
-        self.sMax = sMax
-        self.vMax = vMax
-        self.sAdd = sAdd
-        self.sSub = sSub
-        self.vAdd = vAdd
-        self.vSub = vSub
-
-
-class FindHSV:
     TRACKBAR_WINDOW = "Trackbars"
 
     def __init__(self):
@@ -37,11 +24,12 @@ class FindHSV:
         # 创建用于包围的跟踪条。
         # HSV 的 OpenCV 量表为 H： 0-179， S： 0-255， V： 0-255
         cv.createTrackbar('HMin', self.TRACKBAR_WINDOW, 0, 179, nothing)
-        cv.createTrackbar('SMin', self.TRACKBAR_WINDOW, 0, 255, nothing)
-        cv.createTrackbar('VMin', self.TRACKBAR_WINDOW, 0, 255, nothing)
         cv.createTrackbar('HMax', self.TRACKBAR_WINDOW, 0, 179, nothing)
+        cv.createTrackbar('SMin', self.TRACKBAR_WINDOW, 0, 255, nothing)
         cv.createTrackbar('SMax', self.TRACKBAR_WINDOW, 0, 255, nothing)
+        cv.createTrackbar('VMin', self.TRACKBAR_WINDOW, 0, 255, nothing)
         cv.createTrackbar('VMax', self.TRACKBAR_WINDOW, 0, 255, nothing)
+
         # 设置最大 HSV 跟踪条的默认值
         cv.setTrackbarPos('HMax', self.TRACKBAR_WINDOW, 179)
         cv.setTrackbarPos('SMax', self.TRACKBAR_WINDOW, 255)
@@ -56,19 +44,27 @@ class FindHSV:
         # 根据控制 GUI 值返回 HSV 筛选器对象
 
     def get_hsv_filter_from_controls(self):
-        # 获取所有轨迹栏的当前位置
-        hsv_filter = HsvFilter()
-        hsv_filter.hMin = cv.getTrackbarPos('HMin', self.TRACKBAR_WINDOW)
-        hsv_filter.hMax = cv.getTrackbarPos('HMax', self.TRACKBAR_WINDOW)
-        hsv_filter.sMin = cv.getTrackbarPos('SMin', self.TRACKBAR_WINDOW)
-        hsv_filter.sMax = cv.getTrackbarPos('SMax', self.TRACKBAR_WINDOW)
-        hsv_filter.vMin = cv.getTrackbarPos('VMin', self.TRACKBAR_WINDOW)
-        hsv_filter.vMax = cv.getTrackbarPos('VMax', self.TRACKBAR_WINDOW)
-        hsv_filter.sAdd = cv.getTrackbarPos('SAdd', self.TRACKBAR_WINDOW)
-        hsv_filter.sSub = cv.getTrackbarPos('SSub', self.TRACKBAR_WINDOW)
-        hsv_filter.vAdd = cv.getTrackbarPos('VAdd', self.TRACKBAR_WINDOW)
-        hsv_filter.vSub = cv.getTrackbarPos('VSub', self.TRACKBAR_WINDOW)
+        hsv_filter = {
+            "hMin": cv.getTrackbarPos('HMin', self.TRACKBAR_WINDOW),
+            "sMin": cv.getTrackbarPos('SMin', self.TRACKBAR_WINDOW),
+            "vMin": cv.getTrackbarPos('VMin', self.TRACKBAR_WINDOW),
+            "hMax": cv.getTrackbarPos('HMax', self.TRACKBAR_WINDOW),
+            "sMax": cv.getTrackbarPos('SMax', self.TRACKBAR_WINDOW),
+            "vMax": cv.getTrackbarPos('VMax', self.TRACKBAR_WINDOW),
+            "sAdd": cv.getTrackbarPos('SAdd', self.TRACKBAR_WINDOW),
+            "sSub": cv.getTrackbarPos('SSub', self.TRACKBAR_WINDOW),
+            "vAdd": cv.getTrackbarPos('VAdd', self.TRACKBAR_WINDOW),
+            "vSub": cv.getTrackbarPos('VSub', self.TRACKBAR_WINDOW)
+        }
         return hsv_filter
+
+    def undate_config(self, file):
+        """
+        :param file: 你保存的json文件名字
+        :return:
+        """
+        with open(file, 'w') as js:
+            json.dump(self.get_hsv_filter_from_controls(), js, indent='\t', ensure_ascii=False)
 
     def apply_hsv_filter(self, original_image, hsv_filter=None):
         # 将图像转换为 HSV
@@ -80,15 +76,15 @@ class FindHSV:
 
         # 加减饱和度和值
         h, s, v = cv.split(hsv)
-        s = self.shift_channel(s, hsv_filter.sAdd)
-        s = self.shift_channel(s, -hsv_filter.sSub)
-        v = self.shift_channel(v, hsv_filter.vAdd)
-        v = self.shift_channel(v, -hsv_filter.vSub)
+        s = self.shift_channel(s, hsv_filter['sAdd'])
+        s = self.shift_channel(s, -hsv_filter['sSub'])
+        v = self.shift_channel(v, hsv_filter['vAdd'])
+        v = self.shift_channel(v, -hsv_filter['vSub'])
         hsv = cv.merge([h, s, v])
 
         # 设置要显示的最小和最大 HSV 值
-        lower = np.array([hsv_filter.hMin, hsv_filter.sMin, hsv_filter.vMin])
-        upper = np.array([hsv_filter.hMax, hsv_filter.sMax, hsv_filter.vMax])
+        lower = np.array([hsv_filter['hMin'], hsv_filter['sMin'], hsv_filter['vMin']])
+        upper = np.array([hsv_filter['hMax'], hsv_filter['sMax'], hsv_filter['vMax']])
         # 应用阈值
         mask = cv.inRange(hsv, lower, upper)
         result = cv.bitwise_and(hsv, hsv, mask=mask)
@@ -113,16 +109,15 @@ class FindHSV:
 
 
 if __name__ == '__main__':
-    hsv_filter = HsvFilter(0, 180, 129, 15, 229, 243, 143, 0, 67, 0)
-    src = cv.imread(r'E:\Py\opencv_view\module\ui.png')
-    f = FindHSV()
-    f.init_control_gui()  # 初始化控制UI
-    img = src.copy()
-    while 1:
+    from module import matching, windowCapture
+    cap = windowCapture.WindowCapture((0, 31, 1027, 799))  # 截图类
 
-        src = f.apply_hsv_filter(img)
-        cv.imshow('window', src)
-        if cv.waitKey(4) == ord('q'):
-            cv.destroyAllWindows()
-        print('1')
-        sleep(0.1)
+    f = HsvFilter()
+    f.init_control_gui()  # 初始化控制台
+    while 1:
+        screenshot = cap.screenshot()
+        img = f.apply_hsv_filter(screenshot)
+        cv.imshow('win', img)
+        if cv.waitKey(1) == ord('q'):
+            f.undate_config('HsvFilter.json')
+            break
